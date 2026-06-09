@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path"
@@ -19,17 +20,17 @@ var (
 	logger         zerolog.Logger
 )
 
-func prepLogDir() {
+func prepLogDir() error {
 	logDir = snek.String("logger.directory")
 	if logDir == "" {
 		logDir = filepath.Join(home, ".local", "share", Title, "logs")
 	}
-	_ = os.MkdirAll(logDir, 0750)
+	return os.MkdirAll(logDir, 0o750)
 }
 
 // StartLogger instantiates an instance of our zerolog loggger so we can hook it in our main package.
 // While this does return a logger, it should not be used for additional retrievals of the logger. Use GetLogger().
-func StartLogger(pretty bool, targets ...io.Writer) zerolog.Logger {
+func StartLogger(pretty bool, targets ...io.Writer) (zerolog.Logger, error) {
 	logFileName := "HellPot"
 
 	if snek.Bool("logger.use_date_filename") {
@@ -44,13 +45,14 @@ func StartLogger(pretty bool, targets ...io.Writer) zerolog.Logger {
 	case len(targets) > 0:
 		logFile = io.MultiWriter(targets...)
 	default:
-		prepLogDir()
+		if err = prepLogDir(); err != nil {
+			return zerolog.Logger{}, fmt.Errorf("cannot create log directory %q: %w", logDir, err)
+		}
 		CurrentLogFile = path.Join(logDir, logFileName+".log")
-		//nolint:lll
-		logFile, err = os.OpenFile(CurrentLogFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o666) // #nosec G304 G302 -- we are not using user input to create the file
+		// #nosec G304 -- logDir is an explicit configuration value; the file name is generated here.
+		logFile, err = os.OpenFile(CurrentLogFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o600)
 		if err != nil {
-			println("cannot create log file: " + err.Error())
-			os.Exit(1)
+			return zerolog.Logger{}, fmt.Errorf("cannot create log file %q: %w", CurrentLogFile, err)
 		}
 	}
 
@@ -61,7 +63,7 @@ func StartLogger(pretty bool, targets ...io.Writer) zerolog.Logger {
 	}
 
 	logger = zerolog.New(logWriter).With().Timestamp().Logger()
-	return logger
+	return logger, nil
 }
 
 // GetLogger retrieves our global logger object.

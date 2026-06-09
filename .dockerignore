@@ -1,0 +1,10 @@
+.git
+.github
+.agents
+.codex
+.backups
+.idea
+art
+dist
+HellPot
+*.save

@@ -1,30 +1,9 @@
 package config
 
-import (
-	"runtime/debug"
-)
-
 // Title is the name of the application used throughout the configuration process.
 const Title = "HellPot"
 
-var Version = "dev"
-
-func init() {
-	if Version != "dev" {
-		return
-	}
-	binInfo := make(map[string]string)
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		return
-	}
-	for _, v := range info.Settings {
-		binInfo[v.Key] = v.Value
-	}
-	if gitrev, ok := binInfo["vcs.revision"]; ok {
-		Version = gitrev[:7]
-	}
-}
+var Version = "0.60"
 
 var (
 	// BannerOnly when toggled causes HellPot to only print the banner and version then exit.
@@ -69,7 +48,7 @@ var (
 
 	// UseragentBlacklistMatchers contains useragent matches checked for with strings.Contains() that
 	// prevent HellPot from firing off.
-	// See: https://github.com/yunginnanet/HellPot/issues/23
+	// See: https://github.com/t3chn0m4g3/hellpot/issues/23
 	UseragentBlacklistMatchers []string
 )
 

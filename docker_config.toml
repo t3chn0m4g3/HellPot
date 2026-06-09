@@ -1,18 +1,63 @@
 [deception]
+  # Used as the HTTP "Server" response header.
+  # Reverse proxies may hide or replace this header.
   server_name = "nginx"
 
 [http]
+  # Docker binds inside the container on all interfaces.
+  # Publish the port with Docker or Compose to expose it on the host.
   bind_addr = "0.0.0.0"
   bind_port = "8080"
-  real_ip_header = 'X-Real-IP'
+
+  # Header containing the original client IP in reverse proxy deployments.
+  real_ip_header = "X-Real-IP"
+
+  # Case-sensitive user-agent substrings that should not be trapped.
+  # Matching clients receive "Not found" for every request.
   uagent_string_blacklist = ["Cloudflare-Traffic-Manager", "curl"]
 
+  # Unix sockets are normally not useful inside this container image.
+  use_unix_socket = false
+  unix_socket_path = "/var/run/hellpot"
+  unix_socket_permissions = "0666"
+
   [http.router]
-    catchall = true  # /robots.txt assumed to be served elsewhence
+    # Trap every GET request path.
+    # In catchall mode HellPot does not serve /robots.txt.
+    catchall = true
+
+    # Only used when catchall is false.
+    makerobots = true
+
+    # Only used when catchall is false.
+    paths = [
+      "wp-login.php",
+      "wp-login"
+    ]
 
 [logger]
+  # Keep container logs quiet by default.
   debug = false
   trace = false
+
+  # Send structured logs to stdout and disable file logging.
+  docker_logging = true
+
+  # Ignored when docker_logging is true.
   directory = "/logs/"
+
+  # Disable color and banner output in container logs.
   nocolor = true
+
+  # Ignored when docker_logging is true.
   use_date_filename = true
+
+  # Go time format used by pretty console logs when docker_logging is false.
+  console_time_format = "3:04PM"
+
+[performance]
+  # Restrict fasthttp concurrency to max_workers.
+  restrict_concurrency = false
+
+  # Only used when restrict_concurrency is true.
+  max_workers = 256

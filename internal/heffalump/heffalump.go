@@ -1,15 +1,18 @@
 /*
-Package heffalump attempts to encapsulate the original work by carlmjohnson on heffalump
-https://github.com/carlmjohnson/heffalump
+Package heffalump contains HellPot's internal adaptation of Carl Johnson's
+Heffalump Markov stream generator.
+
+Original project: https://github.com/carlmjohnson/heffalump
 */
 package heffalump
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"sync"
 
-	"github.com/yunginnanet/HellPot/internal/config"
+	"github.com/t3chn0m4g3/hellpot/internal/config"
 )
 
 var log = config.GetLogger()
@@ -37,27 +40,44 @@ func NewHeffalump(mm MarkovMap, buffsize int) *Heffalump {
 }
 
 // WriteHell writes markov chain heffalump hell to the provided io.Writer
-func (h *Heffalump) WriteHell(bw *bufio.Writer) (int64, error) {
-	var n int64
-	var err error
-
+func (h *Heffalump) WriteHell(bw *bufio.Writer) (n int64, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Error().Interface("caller", r).Msg("panic recovered!")
+			err = fmt.Errorf("panic recovered: %v", r)
 		}
 	}()
 
 	buf := h.pool.Get().([]byte)
+	defer h.pool.Put(buf)
 
-	if _, err = bw.WriteString("<html>\n<body>\n"); err != nil {
-		h.pool.Put(buf)
+	var wn int
+	if wn, err = bw.WriteString("<html>\n<body>\n"); err != nil {
 		return n, err
 	}
-	if n, err = io.CopyBuffer(bw, h.mm, buf); err != nil {
-		h.pool.Put(buf)
-		return n, nil
+	n += int64(wn)
+	if err = bw.Flush(); err != nil {
+		return n, err
 	}
 
-	h.pool.Put(buf)
-	return n, nil
+	r := h.mm.NewReader()
+	for {
+		read, readErr := r.Read(buf)
+		if read > 0 {
+			wn, err = bw.Write(buf[:read])
+			n += int64(wn)
+			if err != nil {
+				return n, err
+			}
+			if wn != read {
+				return n, io.ErrShortWrite
+			}
+			if err = bw.Flush(); err != nil {
+				return n, err
+			}
+		}
+		if readErr != nil {
+			return n, readErr
+		}
+	}
 }

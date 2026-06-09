@@ -1,6 +1,6 @@
 /dist
 art
-HellPot
+/HellPot
 .idea/
 *.save
 *.toml

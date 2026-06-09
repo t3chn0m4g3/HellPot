@@ -1,189 +1,507 @@
-<div align="center">
-  <img src="https://tcp.ac/i/00ctL.gif" alt="HellPot"/>
+# HellPot
 
-[![GoDoc](https://godoc.org/github.com/yunginnanet/HellPot?status.svg)](https://godoc.org/github.com/yunginnanet/HellPot) [![Go Report Card](https://goreportcard.com/badge/github.com/yunginnanet/HellPot)](https://goreportcard.com/report/github.com/yunginnanet/HellPot) [![IRC](https://img.shields.io/badge/ircd.chat-%23tcpdirect-blue.svg)](ircs://ircd.chat:6697/#tcpdirect) [![Mentioned in Awesome Honeypots](https://awesome.re/mentioned-badge.svg)](https://github.com/paralax/awesome-honeypots)
+HellPot is an HTTP honeypot for clients that ignore `robots.txt`, probe common
+application paths, or otherwise wander where they were told not to go. When a
+client reaches a configured trap route, HellPot responds with an endless stream
+of generated HTML-like text.
 
-</div>
+The generated stream comes from an internal adaptation of
+[Heffalump](https://github.com/carlmjohnson/heffalump), a Markov-chain text
+generator. HellPot keeps that code under `internal/heffalump` because it is an
+implementation detail of the honeypot, not a public library API.
 
-## Summary
+Under the hood HellPot uses:
 
-HellPot is an endless honeypot based on [Heffalump](https://github.com/carlmjohnson/heffalump) that sends unruly HTTP bots to hell.
+- [fasthttp](https://github.com/valyala/fasthttp) for HTTP serving.
+- [koanf](https://github.com/knadh/koanf) for TOML and environment-based configuration.
+- [zerolog](https://github.com/rs/zerolog) for structured JSON logging.
+- A bundled Markov source based on Nietzsche's *The Birth of Tragedy*.
 
-Notably it implements a [toml configuration file](https://github.com/knadh/koanf), has [JSON logging](https://github.com/rs/zerolog), and comes with significant performance gains.
+## Safety Notes
 
-## Grave Consequences
+HellPot is intentionally annoying to bad clients. That is the entire point.
+Deploy it thoughtfully.
 
-Clients (hopefully bots) that disregard `robots.txt` and connect to your instance of HellPot will **suffer eternal consequences**.
+- Prefer running HellPot behind a reverse proxy and route only known trap paths
+  to it.
+- Do not put normal website traffic behind HellPot unless you really want those
+  users to receive an endless response.
+- Use `http.router.catchall = true` only for dedicated trap hosts or deliberate
+  fallback/error routing.
+- Tune `performance.restrict_concurrency`, `performance.max_workers`, and your
+  reverse proxy rate limits for the hardware you actually have.
+- Logs can grow quickly on noisy hosts. Use log rotation or Docker stdout logging
+  with an external log collector.
 
-HellPot will send an infinite stream of data that is _just close enough_ to being a real website that they might just stick around until their soul is ripped apart and they cease to exist.
+## Requirements
 
-Under the hood of this eternal suffering is a markov engine that chucks bits and pieces of [The Birth of Tragedy (Hellenism and Pessimism)](https://www.gutenberg.org/files/51356/51356-h/51356-h.htm) by Friedrich Nietzsche at the client using [fasthttp](https://github.com/valyala/fasthttp).
+- Go 1.26.4 or newer for building from source.
+- Docker or another OCI-compatible builder if you want container images.
+- Linux, Windows, macOS, and FreeBSD are supported build targets.
+- Unix socket serving is supported on Linux, macOS, and FreeBSD. Windows falls
+  back to TCP serving.
+
+## Installation
+
+### Release Binary
+
+Download a release binary from:
+
+```text
+https://github.com/t3chn0m4g3/hellpot/releases/latest
+```
+
+Then run it directly:
+
+```shell
+./HellPot --help
+./HellPot --genconfig
+./HellPot -c config.toml
+```
+
+### From Source
+
+```shell
+git clone https://github.com/t3chn0m4g3/hellpot
+cd hellpot
+make
+./HellPot --help
+```
+
+### Docker
+
+Build a local image:
+
+```shell
+docker build --build-arg VERSION=0.60 -t hellpot:0.60 .
+```
+
+Run with the bundled Docker config:
+
+```shell
+docker run --rm -p 8080:8080 hellpot:0.60
+```
+
+Run with Docker Compose:
+
+```shell
+docker compose up --build
+```
+
+Run with your own config:
+
+```shell
+docker run --rm \
+  -p 8080:8080 \
+  -v "$PWD/config.toml:/config:ro" \
+  hellpot:0.60
+```
+
+The Docker image runs from `scratch` as a numeric non-root user and uses
+`docker_config.toml` by default. That file enables `logger.docker_logging`, so
+logs go to stdout instead of a file under `/logs`.
+
+Published image names used by the release workflow:
+
+```text
+t3chn0m4g3/hellpot
+ghcr.io/t3chn0m4g3/hellpot
+```
 
 ## Building From Source
 
-HellPot should probably be built with Go version 1.17 or higher.
+The Makefile provides the usual local workflow:
 
-HellPot uses [go modules](https://go.dev/blog/using-go-modules). This should make it dead simple to build with a stock Go installation. To make it even simpler, we've added a GNU Makefile.
+```shell
+make deps     # go mod tidy -v
+make check    # go vet ./... and go test ./...
+make build    # build ./cmd/HellPot into ./HellPot
+make run      # go run ./cmd/HellPot
+```
 
-1 ) `git clone https://github.com/yunginnanet/HellPot`
+The default project version is stored in `VERSION`. `make build` embeds that
+value in the binary unless you override it:
 
-2 ) `cd HellPot`
+```shell
+make build
+VERSION=0.60 make build
+```
 
-4 ) `make`
+Equivalent raw Go build:
 
-5 ) _Consider the potential grave consequences of your actions._
+```shell
+go build -trimpath -o HellPot ./cmd/HellPot
+```
 
-## Usage
+Build with a version embedded in the binary:
 
-### YOLO Method:
+```shell
+go build -trimpath \
+  -ldflags "-s -w -X main.version=0.60" \
+  -o HellPot \
+  ./cmd/HellPot
+```
 
-In the event of a missing configuration file, HellPot will attempt to place it's default config in **$HOME/.config/HellPot/config.toml**. This allows irresponsible souls to begin raining hellfire with ease, **_immediately_**:
+The release workflow passes the tag or ref name through the same linker flag.
 
-1 ) Download a [compiled release](https://github.com/yunginnanet/HellPot/releases/latest)
+## CLI Reference
 
-2 ) Run binary and immediately begin sending clients directly to hell.
+```shell
+HellPot [options]
 
----
+Options:
+  -c, --config <file>   Specify config file
+  -v, --debug           Enable debug logging
+  -vv, --trace          Enable trace logging
+      --nocolor         Disable color and banner
+      --banner          Show banner + version and exit
+      --genconfig       Write default config to ./config.toml and exit
+      --version         Show version and exit
+  -h, --help            Show this help and exit
+```
 
-### Reasonable Method:
+Examples:
 
-1 ) Configure webserver as reverse proxy (see below)
+```shell
+./HellPot --version
+./HellPot --genconfig
+./HellPot -c config.toml
+./HellPot -c config.toml -v
+./HellPot -c config.toml -vv --nocolor
+```
 
-2 ) `./HellPot --genconfig `
+## Configuration
 
-3 ) Edit your newly generated `config.toml` as desired.
+HellPot uses TOML configuration. Generate a starter file:
 
-4 ) Ponder your ~~existence~~ server's ability to handle your chosen performance values.
+```shell
+./HellPot --genconfig
+```
 
-5 ) ./HellPot -c config.toml
+The generated file is commented and includes every currently supported option.
 
-666 ) 𝙏͘͝𝙝̓̓͛𝙚͑̈́̀ 𝙨͆͠͝𝙠͑̾͌𝙮̽͌͆ 𝙞̓̔̔𝙨͒͐͝ 𝙛͑̈́̚𝙖͛͒𝙡͑͆̽𝙡̾̚̚𝙞͋̒̒𝙣̾͛͝𝙜͒̒̀.́̔͝​
+Run with an explicit file:
 
-## Configuration Reference
+```shell
+./HellPot -c config.toml
+```
 
+When no `-c` or `--config` is provided, HellPot looks for configuration in this
+order:
 
-> [!TIP]
-> Configuration values can be overridden with environment variables prefixed with `HELLPOT_`.
-> When using this method, replace underscores in configuration keys with two underscores.
->
-> e.g:
-> to set `http.bind_addr` via env, set `HELLPOT_HTTP_BIND__ADDR="x.x.x.x"`
+1. `/etc/HellPot/config.toml` on non-Windows systems.
+2. The user config directory, usually `$XDG_CONFIG_HOME/HellPot/config.toml` or
+   `$HOME/.config/HellPot/config.toml`.
+3. `./config.toml` only if the user config directory is unavailable.
 
+If the chosen default config file is missing, HellPot writes a default config to
+that location and then loads it. Explicit `-c` paths must already exist.
+
+### Environment Overrides
+
+Every config key can be overridden with an environment variable prefixed with
+`HELLPOT_`.
+
+Rules:
+
+- The prefix is stripped.
+- The name is lowercased.
+- Single underscores become dots.
+- Double underscores become literal underscores inside a key segment.
+
+Examples:
+
+```shell
+HELLPOT_HTTP_BIND__ADDR="0.0.0.0" ./HellPot
+HELLPOT_HTTP_BIND__PORT="8081" ./HellPot
+HELLPOT_LOGGER_DEBUG="false" ./HellPot
+HELLPOT_HTTP_ROUTER_CATCHALL="true" ./HellPot
+```
+
+## Example Config
 
 ```toml
 [deception]
-  # Used as "Server" HTTP header. Note that reverse proxies may hide this.
   server_name = "nginx"
 
 [http]
-  # TCP Listener (default)
   bind_addr = "127.0.0.1"
   bind_port = "8080"
-
-  # header name containing clients real IP, for reverse proxy deployments
-  real_ip_header = 'X-Real-IP'
-
-  # this contains a list of blacklisted useragent strings. (case sensitive)
-  # clients with useragents containing any of these strings will receive "Not found" for any requests.
+  real_ip_header = "X-Real-IP"
   uagent_string_blacklist = ["Cloudflare-Traffic-Manager", "curl"]
-
-  # Unix Socket Listener (will override default)
+  use_unix_socket = false
   unix_socket_path = "/var/run/hellpot"
   unix_socket_permissions = "0666"
-  use_unix_socket = false
 
   [http.router]
-    # Toggling this to true will cause all GET requests to match. Forces makerobots = false.
     catchall = false
-    # Toggling this to false will prevent creation of robots.txt handler.
     makerobots = true
-    # Handlers will be created for these paths, as well as robots.txt entries. Only valid if catchall = false.
     paths = ["wp-login.php", "wp-login"]
 
 [logger]
-  # verbose (-v)
   debug = true
-  # extra verbose (-vv)
   trace = false
-  # JSON log files will be stored in the below directory.
-  directory = "/home/kayos/.local/share/HellPot/logs/"
-  # disable all color in console output. when using Windows this will default to true.
   nocolor = false
-  # toggles the use of the current date as the names for new log files.
   use_date_filename = true
+  docker_logging = false
+  console_time_format = "3:04PM"
 
 [performance]
-  # max_workers is only valid if restrict_concurrency is true
-  max_workers = 256
   restrict_concurrency = false
+  max_workers = 256
 ```
 
-### Example Reverse Proxy Configs
+## Config Reference
 
-#### nginx
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `deception.server_name` | string | `nginx` | Value used for the HTTP `Server` header. Reverse proxies may hide or replace it. |
+| `http.bind_addr` | string | `127.0.0.1` | TCP bind address. Use `0.0.0.0` for container or public network binds. |
+| `http.bind_port` | string | `8080` | TCP bind port. Kept as a string for compatibility with existing configs. |
+| `http.real_ip_header` | string | `X-Real-IP` | Header used for logging the original client IP behind a reverse proxy. |
+| `http.uagent_string_blacklist` | list | `["Cloudflare-Traffic-Manager"]` | Case-sensitive user-agent substrings that receive `404 Not found` instead of the endless stream. |
+| `http.use_unix_socket` | bool | `false` | Enables Unix socket serving on supported platforms. Overrides TCP serving. |
+| `http.unix_socket_path` | string | `/var/run/hellpot` | Unix socket path when `http.use_unix_socket` is enabled. |
+| `http.unix_socket_permissions` | string | `0666` | Octal permissions applied to the Unix socket after binding. |
+| `http.router.catchall` | bool | `false` | When true, all GET paths are trap paths and `robots.txt` is not generated by HellPot. |
+| `http.router.makerobots` | bool | `true` | When true and catchall is false, HellPot serves `/robots.txt`. |
+| `http.router.paths` | list | `["wp-login.php", "wp-login"]` | Trap paths used for route registration and `robots.txt` disallow entries. |
+| `logger.debug` | bool | `true` | Enables debug-level logging. Can also be forced with `-v` or `--debug`. |
+| `logger.trace` | bool | `false` | Enables trace-level logging. Can also be forced with `-vv` or `--trace`. |
+| `logger.directory` | string | empty | Directory for JSON log files. Empty falls back to `$HOME/.local/share/HellPot/logs`. |
+| `logger.nocolor` | bool | `false` | Disables color and the decorative banner. Defaults to true on Windows. |
+| `logger.use_date_filename` | bool | `true` | Adds the current date/time to generated log filenames. |
+| `logger.docker_logging` | bool | `false` | Sends logs to stdout and disables file logging. The bundled Docker config sets this to true. |
+| `logger.console_time_format` | string | `3:04PM` | Time format passed to Go's `time.Format` for console output. |
+| `performance.restrict_concurrency` | bool | `false` | When false, fasthttp uses its default concurrency. |
+| `performance.max_workers` | int | `256` | Server concurrency when `performance.restrict_concurrency` is true. |
 
-<details>
-  <summary>nginx</summary>
+## Running HellPot
+
+### Direct TCP
+
+```toml
+[http]
+bind_addr = "127.0.0.1"
+bind_port = "8080"
+use_unix_socket = false
+```
+
+```shell
+./HellPot -c config.toml
+```
+
+### Path-Based Trap Mode
+
+Path-based mode serves only configured trap paths and optionally `/robots.txt`.
+
+```toml
+[http.router]
+catchall = false
+makerobots = true
+paths = ["wp-login.php", "wp-login", "admin"]
+```
+
+Requests to `/wp-login.php`, `/wp-login`, and `/admin` trigger the endless
+stream. `/robots.txt` advertises those paths as disallowed.
+
+### Catchall Mode
+
+Catchall mode traps every GET path:
+
+```toml
+[http.router]
+catchall = true
+```
+
+Use this for a dedicated honeypot vhost, error-document backend, or intentionally
+isolated trap service. In catchall mode HellPot does not register its own
+`/robots.txt` handler.
+
+### Unix Socket Mode
+
+Unix socket mode is useful when the reverse proxy and HellPot run on the same
+host:
+
+```toml
+[http]
+use_unix_socket = true
+unix_socket_path = "/run/hellpot.sock"
+unix_socket_permissions = "0660"
+```
+
+HellPot unlinks an existing socket at that path before listening.
+
+## Reverse Proxy Examples
+
+### nginx, TCP Backend
 
 ```nginx
-location '/robots.txt' {
-	proxy_set_header Host $host;
-	proxy_set_header X-Real-IP $remote_addr;
-	proxy_pass http://127.0.0.1:8080$request_uri;
+location = /robots.txt {
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_pass http://127.0.0.1:8080$request_uri;
 }
 
-location '/wp-login.php' {
-	proxy_set_header Host $host;
-	proxy_set_header X-Real-IP $remote_addr;
-	proxy_pass http://127.0.0.1:8080$request_uri;
+location = /wp-login.php {
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_pass http://127.0.0.1:8080$request_uri;
+}
+
+location = /wp-login {
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_pass http://127.0.0.1:8080$request_uri;
 }
 ```
 
-</details>
+### nginx, Unix Socket Backend
 
-#### Apache
+```nginx
+location = /wp-login.php {
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_pass http://unix:/run/hellpot.sock:$request_uri;
+}
+```
 
-<details>
-  <summary>apache (mod_proxy + mod_proxy_http)</summary>
+### Apache ErrorDocument Backend
 
-All nonexisting URLs are being reverse proxied to a HellPot instance on localhost, which is set to catchall. Traffic served by HellPot is rate limited to 5 KiB/s.
-
-- Create your normal robots.txt and usual content. Also create the fake Errordocument directory and files (files can be empty). In the example, the directory is "/content/"
-- A request on a URL with an existing handler (f.e. a file) will be handled by apache
-- Requests on nonexisting URLs cause a HTTP Error 404, which content is served by HellPot
-- URLs under the "/.well-known/" suffix are excluded.
+This pattern sends missing paths to HellPot while normal existing files continue
+to be served by Apache.
 
 ```apache
-<VirtualHost yourserver>
-    ErrorDocument 400 "/content/400"
-    ErrorDocument 403 "/content/403"
-    ErrorDocument 404 "/content/404"
-    ErrorDocument 500 "/content/405"
-    <Directory "$wwwroot/.well-known/">
-        ErrorDocument 400 default
-        ErrorDocument 403 default
-        ErrorDocument 404 default
-        ErrorDocument 500 default
-    </Directory>
-    /* HTTP Honeypot / HellPot (need mod_proxy, mod_proxy_http) */
-    ProxyPreserveHost	on
-    ProxyPass         "/content/" "http://localhost:8080/"
-    ProxyPassReverse  "/content/" "http://localhost:8080/"
+<VirtualHost *:80>
+    ServerName example.com
 
-    /* Rate Limit config, need mod_ratelimit */
+    ErrorDocument 404 "/content/404"
+
+    <Directory "/var/www/html/.well-known/">
+        ErrorDocument 404 default
+    </Directory>
+
+    ProxyPreserveHost On
+    ProxyPass        "/content/" "http://127.0.0.1:8080/"
+    ProxyPassReverse "/content/" "http://127.0.0.1:8080/"
+
     <Location "/content/">
+        RequestHeader set X-Real-IP "%{REMOTE_ADDR}s"
         SetOutputFilter RATE_LIMIT
         SetEnv rate-limit 5
     </Location>
-
-    /* Remaining config */
-
 </VirtualHost>
 ```
 
-</details>
+## Docker Details
+
+The Dockerfile uses a multi-stage build:
+
+1. `golang:1.26.4` builds and runs `go vet` plus `go test`.
+2. `scratch` runs the statically linked compiled binary as UID/GID `65532`.
+
+Build:
+
+```shell
+docker build --build-arg VERSION=0.60 -t hellpot:0.60 .
+```
+
+Run with port mapping:
+
+```shell
+docker run --rm -p 8080:8080 hellpot:0.60
+```
+
+Run with a mounted config:
+
+```shell
+docker run --rm \
+  -p 8080:8080 \
+  -v "$PWD/docker_config.toml:/config:ro" \
+  hellpot:0.60
+```
+
+Run with Docker Compose:
+
+```shell
+docker compose up --build
+```
+
+The Compose file builds the local Dockerfile, publishes `${HELLPOT_PORT:-8080}`
+to container port `8080`, mounts `./docker_config.toml` read-only at `/config`,
+and applies a read-only filesystem plus basic Linux capability hardening.
+
+The image entrypoint is:
+
+```text
+/app -c /config
+```
+
+The default `docker_config.toml` binds `0.0.0.0:8080`, enables catchall mode, and
+sends logs to stdout.
+
+## Logging
+
+Default non-Docker behavior:
+
+- Pretty console logs are written to stdout.
+- JSON log files are written under `logger.directory`.
+- If `logger.directory` is empty, HellPot uses `$HOME/.local/share/HellPot/logs`.
+
+Docker behavior:
+
+- Set `logger.docker_logging = true`.
+- HellPot writes structured logs to stdout.
+- File logging is disabled.
+- `--nocolor` or `logger.nocolor = true` suppresses color/banner output.
+
+Use `-v` or `--debug` for debug logs, and `-vv` or `--trace` for trace logs.
+
+## Development
+
+Common checks:
+
+```shell
+go test ./...
+go test -race ./...
+go vet ./...
+go run github.com/securego/gosec/v2/cmd/gosec@latest ./...
+go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+docker build --build-arg VERSION=test -t hellpot:test .
+```
+
+Local build and run:
+
+```shell
+make build
+./HellPot --version
+./HellPot --help
+```
+
+## Project Layout
+
+```text
+cmd/HellPot/          CLI entrypoint and application orchestration
+internal/config/      CLI flags, TOML loading, env overrides, logger setup
+internal/http/        fasthttp server, routes, robots.txt, socket listeners
+internal/heffalump/   internal Markov stream generator adapted from Heffalump
+internal/extra/       banner rendering and presentation helpers
+docker_config.toml    default container configuration
+Dockerfile            multi-stage Go 1.26.4 scratch image build
+Makefile              local development shortcuts
+```
+
+`internal/heffalump` is actively used by `internal/http`: trap responses call
+`DefaultHeffalump.WriteHell` to produce the endless stream. It is internalized so
+external projects do not rely on it as a public API.
+
+## Attribution
+
+HellPot's stream generator is based on
+[Heffalump](https://github.com/carlmjohnson/heffalump) by Carl Johnson. The
+original Heffalump MIT license is retained in `internal/heffalump/LICENSE`.
 
 ## Related Suffering
 
 - https://github.com/ginger51011/pandoras_pot
-  - A HellPot inspired HTTP honeypot to punish and educate unruly web crawlers, written in Rust (🚀)
+  - A HellPot-inspired HTTP honeypot written in Rust.

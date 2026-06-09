@@ -1,0 +1,27 @@
+services:
+  hellpot:
+    image: ${HELLPOT_IMAGE:-hellpot:0.60}
+    build:
+      context: .
+      args:
+        VERSION: ${VERSION:-0.60}
+    container_name: hellpot
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${HELLPOT_PORT:-8080}:8080"
+    volumes:
+      - ./docker_config.toml:/config:ro
+    read_only: true
+    user: "65532:65532"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_signal: SIGTERM
+    stop_grace_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

@@ -7,13 +7,12 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/fasthttp/router"
 	"github.com/valyala/fasthttp"
 
-	"github.com/yunginnanet/HellPot/internal/config"
+	"github.com/t3chn0m4g3/hellpot/internal/config"
 )
 
-func listenOnUnixSocket(addr string, r *router.Router) error {
+func listenOnUnixSocket(addr string, srv *fasthttp.Server) error {
 	var err error
 	var unixAddr *net.UnixAddr
 	var unixListener *net.UnixListener
@@ -38,5 +37,5 @@ func listenOnUnixSocket(addr string, r *router.Router) error {
 		return err
 	}
 
-	return fasthttp.Serve(unixListener, r.Handler)
+	return srv.Serve(unixListener)
 }

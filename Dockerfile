@@ -1,4 +1,4 @@
-FROM golang:1.23 AS build
+FROM golang:1.26.4 AS build
 WORKDIR /go/src/app
 
 COPY go.* .
@@ -8,18 +8,18 @@ COPY . .
 
 RUN go vet -v ./...
 RUN go test -v ./...
-RUN \
-    CGO_ENABLED=0 \
-    VERSION=`git tag --sort=-version:refname | head -n 1` \
-    go build -trimpath \
+ARG VERSION=0.60
+RUN CGO_ENABLED=0 go build -trimpath \
     -ldflags "-s -w -X main.version=$VERSION" \
-    cmd/HellPot/*.go
+    -o /out/HellPot \
+    ./cmd/HellPot
 
 
-FROM gcr.io/distroless/static-debian11
-LABEL org.opencontainers.image.source https://github.com/yunginnanet/HellPot
+FROM scratch
+LABEL org.opencontainers.image.source="https://github.com/t3chn0m4g3/hellpot"
 
-COPY --from=build /go/src/app/HellPot /app
+COPY --from=build /out/HellPot /app
 COPY --from=build /go/src/app/docker_config.toml /config
 EXPOSE 8080
+USER 65532:65532
 ENTRYPOINT ["/app", "-c", "/config"]

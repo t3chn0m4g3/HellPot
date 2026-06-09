@@ -6,9 +6,9 @@ package http
 import (
 	"errors"
 
-	"github.com/fasthttp/router"
+	"github.com/valyala/fasthttp"
 )
 
-func listenOnUnixSocket(addr string, r *router.Router) error {
+func listenOnUnixSocket(addr string, srv *fasthttp.Server) error {
 	return errors.New("unix sockets are not supported on Windows")
 }

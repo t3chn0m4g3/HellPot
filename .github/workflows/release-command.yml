@@ -24,7 +24,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           goos: ${{ matrix.goos }}
           goarch: ${{ matrix.goarch }}
-          # goversion: "https://dl.google.com/go/go1.22.2.linux-amd64.tar.gz"
+          goversion: "https://dl.google.com/go/go1.26.4.linux-amd64.tar.gz"
           project_path: "./cmd/HellPot"
           binary_name: "HellPot"
           compress_assets: OFF
@@ -45,8 +45,8 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            yunginnanet/hellpot
-            ghcr.io/yunginnanet/hellpot
+            t3chn0m4g3/hellpot
+            ghcr.io/t3chn0m4g3/hellpot
           # generate Docker tags based on the following events/attributes
           tags: |
             type=ref,event=branch
@@ -83,3 +83,5 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ github.ref_name }}

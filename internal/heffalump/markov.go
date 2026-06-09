@@ -74,6 +74,15 @@ type tokenPair [2]string
 // MarkovMap is a map that acts as a Markov chain generator.
 type MarkovMap map[tokenPair][]string
 
+// Reader streams generated Markov tokens while preserving chain state across
+// small reads.
+type Reader struct {
+	mm      MarkovMap
+	w1      string
+	w2      string
+	pending string
+}
+
 // MakeMarkovMap makes an empty MakeMarkov and fills it with r.
 func MakeMarkovMap(r io.Reader) MarkovMap {
 	m := MarkovMap{}
@@ -115,17 +124,39 @@ func (mm MarkovMap) Get(w1, w2 string) string {
 	return suffix[r]
 }
 
+// NewReader returns an endless reader backed by mm.
+func (mm MarkovMap) NewReader() *Reader {
+	return &Reader{mm: mm}
+}
+
 // Read fills p with data from calling Get on the MarkovMap.
 func (mm MarkovMap) Read(p []byte) (n int, err error) {
-	var w1, w2, w3 string
-	for {
-		w3 = mm.Get(w1, w2)
-		if n+len(w3)+1 >= len(p) {
-			break
-		}
-		n += copy(p[n:], w3)
-		n += copy(p[n:], "\n")
-		w1, w2 = w2, w3
+	return mm.NewReader().Read(p)
+}
+
+// Read fills p with generated Markov output. It never returns 0, nil for a
+// non-empty buffer, which keeps io.Copy and bufio.Writer.ReadFrom streaming.
+func (r *Reader) Read(p []byte) (n int, err error) {
+	if len(p) == 0 {
+		return 0, nil
 	}
-	return
+
+	for n < len(p) {
+		if r.pending == "" {
+			w3 := r.mm.Get(r.w1, r.w2)
+			if w3 == "" {
+				r.w1, r.w2 = "", ""
+				w3 = "\n"
+			} else {
+				r.w1, r.w2 = r.w2, w3
+				w3 += "\n"
+			}
+			r.pending = w3
+		}
+
+		copied := copy(p[n:], r.pending)
+		n += copied
+		r.pending = r.pending[copied:]
+	}
+	return n, nil
 }

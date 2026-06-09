@@ -3,7 +3,7 @@ package http
 import (
 	"bufio"
 	"fmt"
-	"net/http"
+	"net"
 	"runtime"
 	"strings"
 	"time"
@@ -12,8 +12,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/valyala/fasthttp"
 
-	"github.com/yunginnanet/HellPot/heffalump"
-	"github.com/yunginnanet/HellPot/internal/config"
+	"github.com/t3chn0m4g3/hellpot/internal/config"
+	"github.com/t3chn0m4g3/hellpot/internal/heffalump"
 )
 
 var log *zerolog.Logger
@@ -42,7 +42,7 @@ func hellPot(ctx *fasthttp.RequestCtx) {
 	for _, denied := range config.UseragentBlacklistMatchers {
 		if strings.Contains(string(ctx.UserAgent()), denied) {
 			slog.Trace().Msg("Ignoring useragent")
-			ctx.Error("Not found", http.StatusNotFound)
+			ctx.Error("Not found", fasthttp.StatusNotFound)
 			return
 		}
 	}
@@ -77,14 +77,14 @@ func hellPot(ctx *fasthttp.RequestCtx) {
 
 }
 
-func getSrv(r *router.Router) fasthttp.Server {
+func getSrv(r *router.Router) *fasthttp.Server {
 	if !config.RestrictConcurrency {
 		config.MaxWorkers = fasthttp.DefaultConcurrency
 	}
 
 	log = config.GetLogger()
 
-	return fasthttp.Server{
+	return &fasthttp.Server{
 		// User defined server name
 		// Likely not useful if behind a reverse proxy without additional configuration of the proxy server.
 		Name: config.FakeServerName,
@@ -117,10 +117,17 @@ func getSrv(r *router.Router) fasthttp.Server {
 	}
 }
 
-// Serve starts our HTTP server and request router
-func Serve() error {
+// Server wraps HellPot's fasthttp server and listener configuration.
+type Server struct {
+	srv            *fasthttp.Server
+	address        string
+	useUnixSocket  bool
+	unixSocketPath string
+}
+
+// NewServer builds HellPot's HTTP server and request router.
+func NewServer() (*Server, error) {
 	log = config.GetLogger()
-	l := config.HTTPBind + ":" + config.HTTPPort
 
 	r := router.New()
 
@@ -130,8 +137,9 @@ func Serve() error {
 
 	if !config.CatchAll {
 		for _, p := range config.Paths {
-			log.Trace().Str("caller", "router").Msgf("Add route: %s", p)
-			r.GET(fmt.Sprintf("/%s", p), hellPot)
+			route := routePath(p)
+			log.Trace().Str("caller", "router").Str("route", route).Msg("Add route")
+			r.GET(route, hellPot)
 		}
 	} else {
 		log.Trace().Msg("Catch-All mode enabled...")
@@ -142,14 +150,55 @@ func Serve() error {
 
 	//goland:noinspection GoBoolExpressions
 	if !config.UseUnixSocket || runtime.GOOS == "windows" {
-		log.Info().Str("caller", l).Msg("Listening and serving HTTP...")
-		return srv.ListenAndServe(l)
+		return &Server{
+			srv:     srv,
+			address: net.JoinHostPort(config.HTTPBind, config.HTTPPort),
+		}, nil
 	}
 
 	if len(config.UnixSocketPath) < 1 {
-		log.Fatal().Msg("unix_socket_path configuration directive appears to be empty")
+		return nil, fmt.Errorf("unix_socket_path configuration directive appears to be empty")
 	}
 
-	log.Info().Str("caller", config.UnixSocketPath).Msg("Listening and serving HTTP...")
-	return listenOnUnixSocket(config.UnixSocketPath, r)
+	return &Server{
+		srv:            srv,
+		useUnixSocket:  true,
+		unixSocketPath: config.UnixSocketPath,
+	}, nil
+}
+
+// Serve starts the configured listener.
+func (s *Server) Serve() error {
+	if s.useUnixSocket {
+		log.Info().Str("caller", s.unixSocketPath).Msg("Listening and serving HTTP...")
+		return listenOnUnixSocket(s.unixSocketPath, s.srv)
+	}
+
+	log.Info().Str("caller", s.address).Msg("Listening and serving HTTP...")
+	return s.srv.ListenAndServe(s.address)
+}
+
+// Shutdown gracefully stops the HTTP server.
+func (s *Server) Shutdown() error {
+	return s.srv.Shutdown()
+}
+
+// Serve starts our HTTP server and request router.
+func Serve() error {
+	srv, err := NewServer()
+	if err != nil {
+		return err
+	}
+	return srv.Serve()
+}
+
+func routePath(p string) string {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return "/"
+	}
+	if strings.HasPrefix(p, "/") {
+		return p
+	}
+	return "/" + p
 }

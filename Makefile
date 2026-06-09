@@ -1,11 +1,14 @@
+VERSION ?= $(shell sed -n '1p' VERSION)
+
 all: deps check build
 format:
 	find . -iname "*.go" -exec gofmt -s -l -w {} \;
 check:
 	go vet ./...
+	go test ./...
 run:
-	go run cmd/HellPot/*.go
+	go run ./cmd/HellPot
 deps:
 	go mod tidy -v
 build:
-	go build -trimpath -ldflags "-s -w -X main.version=`git tag --sort=-version:refname | head -n 1`" cmd/HellPot/*.go
+	go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o HellPot ./cmd/HellPot
