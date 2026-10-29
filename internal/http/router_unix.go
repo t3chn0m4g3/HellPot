@@ -3,13 +3,14 @@
 package http
 
 import (
+	"fmt"
 	"net"
 	"os"
 	"syscall"
 
 	"github.com/valyala/fasthttp"
 
-	"github.com/t3chn0m4g3/hellpot/internal/config"
+	"github.com/telekom-security/hellpot/internal/config"
 )
 
 func listenOnUnixSocket(addr string, srv *fasthttp.Server) error {
@@ -20,8 +21,6 @@ func listenOnUnixSocket(addr string, srv *fasthttp.Server) error {
 	if err != nil {
 		return err
 	}
-	// Always unlink sockets before listening on them
-	_ = syscall.Unlink(addr)
 	// Before we set socket permissions, we want to make sure only the user HellPot is running under
 	// has permission to the socket.
 	oldmask := syscall.Umask(0o077)
@@ -34,7 +33,10 @@ func listenOnUnixSocket(addr string, srv *fasthttp.Server) error {
 		unixAddr.Name,
 		os.FileMode(config.UnixSocketPermissions),
 	); err != nil {
-		return err
+		if closeErr := unixListener.Close(); closeErr != nil {
+			return fmt.Errorf("set Unix socket permissions: %w (close listener: %v)", err, closeErr)
+		}
+		return fmt.Errorf("set Unix socket permissions: %w", err)
 	}
 
 	return srv.Serve(unixListener)

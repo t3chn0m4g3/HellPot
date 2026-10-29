@@ -1,9 +1,11 @@
 package config
 
+import "net/netip"
+
 // Title is the name of the application used throughout the configuration process.
 const Title = "HellPot"
 
-var Version = "0.60"
+var Version = "0.61"
 
 var (
 	// BannerOnly when toggled causes HellPot to only print the banner and version then exit.
@@ -31,8 +33,11 @@ var (
 	// HTTPPort is defined via our toml configuration file. It is the port that HellPot listens on.
 	HTTPPort string
 	// HeaderName is defined via our toml configuration file. It is the HTTP Header containing the original IP of the client,
-	// in traditional reverse Proxy deployments.
+	// in traditional reverse proxy deployments from a trusted proxy.
 	HeaderName string
+
+	// TrustedProxies contains the proxy networks allowed to set HeaderName.
+	TrustedProxies []netip.Prefix
 
 	// Paths are defined via our toml configuration file. These are the paths that HellPot will present for "robots.txt"
 	//       These are also the paths that HellPot will respond for. Other paths will throw a warning and will serve a 404.
@@ -48,7 +53,7 @@ var (
 
 	// UseragentBlacklistMatchers contains useragent matches checked for with strings.Contains() that
 	// prevent HellPot from firing off.
-	// See: https://github.com/t3chn0m4g3/hellpot/issues/23
+	// See: https://github.com/telekom-security/hellpot/issues/23
 	UseragentBlacklistMatchers []string
 )
 

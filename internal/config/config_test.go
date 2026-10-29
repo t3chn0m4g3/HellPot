@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,6 +28,8 @@ func TestGenerateConfigWritesDefaults(t *testing.T) {
 		"# Used as the HTTP \"Server\" response header.",
 		"[http]",
 		"bind_port = \"8080\"",
+		"trusted_proxies = []",
+		"unix_socket_permissions = \"0600\"",
 		"docker_logging = false",
 		"console_time_format = \"3:04PM\"",
 		"[logger]",
@@ -105,6 +108,38 @@ trace = false
 	}
 	if Debug {
 		t.Fatal("Debug = true, want env override to false")
+	}
+}
+
+func TestInitParsesTrustedProxyCIDRs(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), "trusted-proxy.toml")
+	if err := os.WriteFile(cfg, []byte(`
+[http]
+trusted_proxies = ["10.0.0.0/8", "192.0.2.10/32"]
+`), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	if err := Init(CLIOptions{ConfigPath: cfg}); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if len(TrustedProxies) != 2 || !TrustedProxies[0].Contains(netip.MustParseAddr("10.1.2.3")) {
+		t.Fatalf("TrustedProxies = %v, want configured networks", TrustedProxies)
+	}
+}
+
+func TestInitRejectsInvalidTrustedProxyCIDR(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), "invalid-trusted-proxy.toml")
+	if err := os.WriteFile(cfg, []byte(`
+[http]
+trusted_proxies = ["not-a-cidr"]
+`), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	err := Init(CLIOptions{ConfigPath: cfg})
+	if err == nil || !strings.Contains(err.Error(), "invalid http.trusted_proxies entry") {
+		t.Fatalf("Init() error = %v, want invalid trusted proxy error", err)
 	}
 }
 

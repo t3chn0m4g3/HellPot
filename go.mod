@@ -1,4 +1,4 @@
-module github.com/t3chn0m4g3/hellpot
+module github.com/telekom-security/hellpot
 
 go 1.26.0
 

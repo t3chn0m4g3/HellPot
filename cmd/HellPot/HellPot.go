@@ -12,9 +12,9 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/t3chn0m4g3/hellpot/internal/config"
-	"github.com/t3chn0m4g3/hellpot/internal/extra"
-	hellhttp "github.com/t3chn0m4g3/hellpot/internal/http"
+	"github.com/telekom-security/hellpot/internal/config"
+	"github.com/telekom-security/hellpot/internal/extra"
+	hellhttp "github.com/telekom-security/hellpot/internal/http"
 )
 
 var version string // set by linker

@@ -5,7 +5,7 @@ import (
 
 	"github.com/valyala/fasthttp"
 
-	"github.com/t3chn0m4g3/hellpot/internal/config"
+	"github.com/telekom-security/hellpot/internal/config"
 )
 
 func robotsTXT(ctx *fasthttp.RequestCtx) {

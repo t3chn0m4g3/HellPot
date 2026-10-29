@@ -12,7 +12,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/t3chn0m4g3/hellpot/internal/config"
+	"github.com/telekom-security/hellpot/internal/config"
 )
 
 var log = config.GetLogger()

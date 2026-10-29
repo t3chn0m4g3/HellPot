@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/t3chn0m4g3/hellpot/internal/config"
+	"github.com/telekom-security/hellpot/internal/config"
 )
 
 func TestRunHelpDoesNotCreateConfig(t *testing.T) {

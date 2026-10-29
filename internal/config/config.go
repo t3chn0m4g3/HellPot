@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -19,11 +20,12 @@ import (
 
 // generic vars
 var (
-	noColorForce = false
-	forceDebug   = false
-	forceTrace   = false
-	home         string
-	snek         = viper.New(".")
+	noColorForce          = false
+	forceDebug            = false
+	forceTrace            = false
+	home                  string
+	trustedProxyAddresses []string
+	snek                  = viper.New(".")
 )
 
 func init() {
@@ -94,6 +96,8 @@ func resetState(opts CLIOptions) {
 	UseUnixSocket = false
 	UnixSocketPath = ""
 	UnixSocketPermissions = 0
+	TrustedProxies = nil
+	trustedProxyAddresses = nil
 	UseragentBlacklistMatchers = nil
 	RestrictConcurrency = false
 	MaxWorkers = 0
@@ -214,6 +218,7 @@ func processOpts() {
 	strSliceOpt := map[string]*[]string{
 		"http.router.paths":            &Paths,
 		"http.uagent_string_blacklist": &UseragentBlacklistMatchers,
+		"http.trusted_proxies":         &trustedProxyAddresses,
 	}
 	// bool options and their exported variables
 	boolOpt := map[string]*bool{
@@ -256,6 +261,14 @@ func associateExportedVariables() error {
 	}), nil)
 
 	processOpts()
+	TrustedProxies = make([]netip.Prefix, 0, len(trustedProxyAddresses))
+	for _, address := range trustedProxyAddresses {
+		prefix, err := netip.ParsePrefix(address)
+		if err != nil {
+			return fmt.Errorf("invalid http.trusted_proxies entry %q: %w", address, err)
+		}
+		TrustedProxies = append(TrustedProxies, prefix.Masked())
+	}
 
 	if noColorForce {
 		NoColor = true

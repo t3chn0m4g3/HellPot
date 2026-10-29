@@ -8,7 +8,7 @@ COPY . .
 
 RUN go vet -v ./...
 RUN go test -v ./...
-ARG VERSION=0.60
+ARG VERSION=0.61
 RUN CGO_ENABLED=0 go build -trimpath \
     -ldflags "-s -w -X main.version=$VERSION" \
     -o /out/HellPot \
@@ -16,7 +16,7 @@ RUN CGO_ENABLED=0 go build -trimpath \
 
 
 FROM scratch
-LABEL org.opencontainers.image.source="https://github.com/t3chn0m4g3/hellpot"
+LABEL org.opencontainers.image.source="https://github.com/telekom-security/hellpot"
 
 COPY --from=build /out/HellPot /app
 COPY --from=build /go/src/app/docker_config.toml /config

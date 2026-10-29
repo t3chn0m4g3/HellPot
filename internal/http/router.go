@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"net"
+	"net/netip"
 	"runtime"
 	"strings"
 	"time"
@@ -12,18 +13,30 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/valyala/fasthttp"
 
-	"github.com/t3chn0m4g3/hellpot/internal/config"
-	"github.com/t3chn0m4g3/hellpot/internal/heffalump"
+	"github.com/telekom-security/hellpot/internal/config"
+	"github.com/telekom-security/hellpot/internal/heffalump"
 )
 
 var log *zerolog.Logger
 
 func getRealRemote(ctx *fasthttp.RequestCtx) string {
-	xrealip := string(ctx.Request.Header.Peek(config.HeaderName))
-	if len(xrealip) > 0 {
-		return xrealip
+	remote := ctx.RemoteIP()
+	remoteAddr, ok := netip.AddrFromSlice(remote)
+	if !ok {
+		return remote.String()
 	}
-	return ctx.RemoteIP().String()
+	remoteAddr = remoteAddr.Unmap()
+	for _, trusted := range config.TrustedProxies {
+		if !trusted.Contains(remoteAddr) {
+			continue
+		}
+		forwarded, err := netip.ParseAddr(strings.TrimSpace(string(ctx.Request.Header.Peek(config.HeaderName))))
+		if err == nil {
+			return forwarded.Unmap().String()
+		}
+		break
+	}
+	return remote.String()
 }
 
 func hellPot(ctx *fasthttp.RequestCtx) {

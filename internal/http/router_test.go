@@ -7,6 +7,8 @@ import (
 	"io"
 	"net"
 	nethttp "net/http"
+	"net/netip"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -16,7 +18,7 @@ import (
 
 	"github.com/valyala/fasthttp"
 
-	"github.com/t3chn0m4g3/hellpot/internal/config"
+	"github.com/telekom-security/hellpot/internal/config"
 )
 
 func configureHTTPTest(t *testing.T) {
@@ -29,6 +31,7 @@ func configureHTTPTest(t *testing.T) {
 	config.HTTPBind = "127.0.0.1"
 	config.HTTPPort = "0"
 	config.HeaderName = "X-Real-IP"
+	config.TrustedProxies = nil
 	config.FakeServerName = "nginx"
 	config.MakeRobots = true
 	config.CatchAll = false
@@ -41,6 +44,27 @@ func configureHTTPTest(t *testing.T) {
 	config.UnixSocketPermissions = 0o600
 	config.Trace = false
 	log = config.GetLogger()
+}
+
+func TestGetRealRemoteTrustsForwardedHeaderOnlyFromConfiguredProxy(t *testing.T) {
+	configureHTTPTest(t)
+	var ctx fasthttp.RequestCtx
+	ctx.SetRemoteAddr(&net.TCPAddr{IP: net.ParseIP("198.51.100.10"), Port: 8080})
+	ctx.Request.Header.Set("X-Real-IP", "203.0.113.42")
+
+	if got := getRealRemote(&ctx); got != "198.51.100.10" {
+		t.Fatalf("untrusted forwarded address = %q, want direct peer", got)
+	}
+
+	config.TrustedProxies = []netip.Prefix{netip.MustParsePrefix("198.51.100.0/24")}
+	if got := getRealRemote(&ctx); got != "203.0.113.42" {
+		t.Fatalf("trusted forwarded address = %q, want header address", got)
+	}
+
+	ctx.Request.Header.Set("X-Real-IP", "203.0.113.42, 192.0.2.1")
+	if got := getRealRemote(&ctx); got != "198.51.100.10" {
+		t.Fatalf("invalid forwarded address = %q, want direct peer", got)
+	}
 }
 
 func TestRobotsTXTUsesSlashPathsAndTextContentType(t *testing.T) {
@@ -244,6 +268,29 @@ func TestUnixSocketServerSmoke(t *testing.T) {
 	}
 	if err = <-errCh; err != nil && !isClosedNetworkError(err) {
 		t.Fatalf("Serve() after shutdown error = %v", err)
+	}
+}
+
+func TestUnixSocketDoesNotRemoveExistingNonSocket(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix sockets are not supported on Windows")
+	}
+
+	path := filepath.Join(t.TempDir(), "hellpot.sock")
+	want := []byte("keep this file")
+	if err := os.WriteFile(path, want, 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	if err := listenOnUnixSocket(path, &fasthttp.Server{}); err == nil {
+		t.Fatal("listenOnUnixSocket() error = nil, want existing path error")
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("existing path contents = %q, want %q", got, want)
 	}
 }
 

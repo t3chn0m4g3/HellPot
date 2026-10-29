@@ -23,10 +23,11 @@ var defOpts = map[string]map[string]interface{}{
 	"http": {
 		"use_unix_socket":         false,
 		"unix_socket_path":        "/var/run/hellpot",
-		"unix_socket_permissions": "0666",
+		"unix_socket_permissions": "0600",
 		"bind_addr":               "127.0.0.1",
 		"bind_port":               "8080",
 		"real_ip_header":          "X-Real-IP",
+		"trusted_proxies":         []string{},
 
 		"router": map[string]interface{}{
 			"catchall":   false,
@@ -61,8 +62,9 @@ const defaultConfigTemplate = `[deception]
   bind_addr = "127.0.0.1"
   bind_port = "8080"
 
-  # Header containing the original client IP in reverse proxy deployments.
+  # Only trust this header when the peer is listed in trusted_proxies.
   real_ip_header = "X-Real-IP"
+  trusted_proxies = []
 
   # Case-sensitive user-agent substrings that should not be trapped.
   # Matching clients receive "Not found" for every request.
@@ -73,7 +75,7 @@ const defaultConfigTemplate = `[deception]
   # This is ignored on Windows, where HellPot always uses TCP.
   use_unix_socket = false
   unix_socket_path = "/var/run/hellpot"
-  unix_socket_permissions = "0666"
+  unix_socket_permissions = "0600"
 
   [http.router]
     # When true, every GET request path is trapped.
